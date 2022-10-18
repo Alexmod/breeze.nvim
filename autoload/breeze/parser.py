@@ -8,22 +8,15 @@ parsing the current buffer and generating a DOM tree, whereas the Node class is
 needed to represent a single HTML node.
 """
 
-import vim
-import itertools
+import html.parser as HTMLParser
 
-from breeze.utils import v
-from breeze.utils import misc
-
-try:
-    # python 3
-    import html.parser as HTMLParser
-except ImportError:
-    import HTMLParser as HTMLParser
+from breeze.utils import misc, v
 
 
 class Node:
 
-    def __init__(self, tag="", starttag_text="", parent=None, start=None, end=None):
+    def __init__(self, tag="", starttag_text="", parent=None, start=None,
+                 end=None):
         self.tag = tag  # tag name
         self.starttag_text = starttag_text  # raw starttag text
         self.start = start  # a tuple (row, col)
@@ -54,10 +47,7 @@ class Parser(HTMLParser.HTMLParser):
         try:
             HTMLParser.HTMLParser.feed(self, "\n".join(buffer))
             self.success = True
-            self.last_known_error = None
-        except HTMLParser.HTMLParseError as e:
-            self.last_known_error = dict(msg=e.msg, pos=(e.lineno, e.offset))
-            self.tree = Node(tag="root")
+        except Exception:
             self.success = False
         finally:
             self.reset()
@@ -83,7 +73,7 @@ class Parser(HTMLParser.HTMLParser):
         if self.stack:
             # Note: getpos() return 1-indexed line numbers and 0-indexed
             # column numbers
-            node = Node(tag, self.get_starttag_text(), self.stack[-1], self.getpos())
+            node = Node(tag, '', self.stack[-1], self.getpos())
             self.stack[-1].children.append(node)
             self.stack.append(node)
 
@@ -94,6 +84,7 @@ class Parser(HTMLParser.HTMLParser):
         the tag is closed.
         """
         if self.stack:
+            self.last_known_error = None
             if self.stack[-1].tag == "script" and tag != "script":
                 # ignore everything inside script tag
                 return
@@ -107,25 +98,32 @@ class Parser(HTMLParser.HTMLParser):
                 else:
                     msg = "no opening tag for '</{0}>'".format(tag)
                     pos = self.getpos()
-                raise HTMLParser.HTMLParseError(msg, pos)
+
+                if msg and pos:
+                    self.last_known_error = dict(msg=msg, pos=pos)
+                    raise Exception(msg, pos)
 
             self.stack[-1].end = self.getpos()
             self.stack.pop(-1)
 
     def get_current_node(self):
-        """To return the current element (the one that enclose our cursor position)."""
+        """To return the current element (the one that enclose our cursor 
+        position)."""
         for c in self.tree.children:
-            node, depth = self._closest_node(c, 0, None, -1, v.cursor())
+            node, _ = self._closest_node(c, 0, None, -1, v.cursor())
             if node:
                 return node
 
     def _closest_node(self, tree, depth, closest_node, closest_depth, pos):
-        """To find the closest element that encloses our current cursor position."""
+        """To find the closest element that encloses our current 
+        cursor position."""
         if not tree.start or not tree.end:
             if not tree.start:
-                self.last_known_error = dict(msg="malformed tag found", pos=tree.end)
+                self.last_known_error = dict(
+                    msg="malformed tag found", pos=tree.end)
             if not tree.end:
-                self.last_known_error = dict(msg="malformed tag found", pos=tree.start)
+                self.last_known_error = dict(
+                    msg="malformed tag found", pos=tree.start)
             return (None, -1)
 
         row, col = pos
@@ -160,7 +158,7 @@ class Parser(HTMLParser.HTMLParser):
                 return closest_node, closest_depth
 
             # if the current position is closest to the end of the current
-            # enclosing tag, start iterating its children from the last element,
+            # enclosing tag, start iterating its children from the last element
             # and vice-versa. This little piece of code just aims to improve
             # performances, nothing else.
             if row - tree.start[0] > tree.end[0] - row:
@@ -169,7 +167,8 @@ class Parser(HTMLParser.HTMLParser):
                 rev = False
 
             for child in (reversed(tree.children) if rev else tree.children):
-                n, d = self._closest_node(child, depth + 1, closest_node, closest_depth, pos)
+                n, d = self._closest_node(
+                    child, depth + 1, closest_node, closest_depth, pos)
 
                 if d > closest_depth:
                     # a child of tree node is closest to the current position.
@@ -177,9 +176,9 @@ class Parser(HTMLParser.HTMLParser):
                     closest_depth = d
 
                 if depth < closest_depth:
-                    # we have already found the closest node and we are going up
-                    # the tree structure (depth < closest_depth). There is no
-                    # need to continue the search
+                    # we have already found the closest node and we are going
+                    # up the tree structure (depth < closest_depth). There is
+                    # no need to continue the search
                     return closest_node, closest_depth
 
             return closest_node, closest_depth
@@ -217,5 +216,6 @@ class Parser(HTMLParser.HTMLParser):
     def get_error(self):
         """To return the last known error."""
         if self.last_known_error is not None:
-            return "Error found at {pos}, type: {msg}".format(**self.last_known_error)
+            return "Error found at {pos}, type: {msg}".format(
+                **self.last_known_error)
         return "All should be fine!"
