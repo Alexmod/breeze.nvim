@@ -11,7 +11,7 @@
 " Init
 " ----------------------------------------------------------------------------
 
-if exists("g:breeze_loaded") || &cp || !has('python') || exists("g:breeze_disable")
+if exists("g:breeze_loaded") || &cp ||  exists("g:breeze_disable")
     finish
 endif
 let g:breeze_loaded = 1
