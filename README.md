@@ -7,7 +7,7 @@
 * Low level DOM navigation.
 
 ### Requirements
-* Vim compiled with python 2.6+
+* Vim compiled with python 3.6+
 * Linux, Mac, Windows
 
 ### Installation
